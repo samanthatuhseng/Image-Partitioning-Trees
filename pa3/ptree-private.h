@@ -20,6 +20,24 @@
 //
 /////////////////////////////////////////////////
 
+void drawPNG(Node* node, PNG& png) const;
 
+HSLAPixel averageColor(PNG& im, pair<unsigned int, unsigned int> ul, unsigned int w, unsigned int h);
+
+Node* copyNode(Node* node);
+
+void Clear(Node* subroot);
+
+int subSize(Node* subroot) const;
+
+int subLeaves(Node* subroot) const;
+
+void pruner(Node* node, double tolerance);
+
+bool prunable(Node* original, Node* node, double tolerance);
+
+void flipHorizontal(Node* node);
+
+void flipVertical(Node* node);
 
 #endif

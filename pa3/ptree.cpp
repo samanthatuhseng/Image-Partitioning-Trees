@@ -26,7 +26,11 @@ typedef pair<unsigned int, unsigned int> pairUI;
 */
 void PTree::Clear() {
   // add your implementation below
-  
+
+  if (root != NULL) {
+    Clear(root);
+    root = NULL;
+  }
 }
 
 /*
@@ -38,8 +42,10 @@ void PTree::Clear() {
 *  POST:  This PTree is a physically separate copy of the other PTree.
 */
 void PTree::Copy(const PTree& other) {
-  // add your implementation below
-  
+  root = new Node(other.root->upperleft,other.root->width,other.root->height,other.root->avg,nullptr,nullptr);
+
+  root->A = copyNode(other.root->A);
+  root->B = copyNode(other.root->B);
 }
 
 /*
@@ -54,9 +60,34 @@ void PTree::Copy(const PTree& other) {
 *  RETURN: pointer to the fully constructed Node
 */
 Node* PTree::BuildNode(PNG& im, pair<unsigned int, unsigned int> ul, unsigned int w, unsigned int h) {
-  // replace the line below with your implementation
-  return nullptr;
+
+  Node *node = new Node(ul,w,h,HSLAPixel(0,0,0,0),nullptr,nullptr);
+
+  if (w == 1 && h == 1) { 
+    HSLAPixel *pixel = im.getPixel(ul.first, ul.second);
+    HSLAPixel colour = HSLAPixel(pixel->h,pixel->s,pixel->l,pixel->a);
+    node->avg = colour;
+    return node; 
+    }
+
+  HSLAPixel avgc = averageColor(im, ul, w, h);
+  node->avg = avgc;
+
+  if (w >= h) {
+    int aWidth = w / 2;
+    int bWidth = w - aWidth;
+    node->A = BuildNode(im,ul,aWidth,h);
+    node->B = BuildNode(im,make_pair(ul.first + aWidth,ul.second),bWidth,h);
+
+  } else {
+    int aHeight = h / 2;
+    int bHeight = h - aHeight;
+    node->A = BuildNode(im,ul,w,aHeight);
+    node->B = BuildNode(im,make_pair(ul.first,ul.second + aHeight),w,bHeight);
+  }
+  return node;
 }
+
 
 ////////////////////////////////
 // PTree public member functions
@@ -108,8 +139,7 @@ Node* PTree::BuildNode(PNG& im, pair<unsigned int, unsigned int> ul, unsigned in
 *  POST:  The newly constructed tree contains the PNG's pixel data in each leaf node.
 */
 PTree::PTree(PNG& im) {
-  // add your implementation below
-  
+  root = BuildNode(im, make_pair(0,0), im.width(), im.height());
 }
 
 /*
@@ -120,8 +150,7 @@ PTree::PTree(PNG& im) {
 *  POST:  This tree is constructed as a physically separate copy of other tree.
 */
 PTree::PTree(const PTree& other) {
-  // add your implementation below
-  
+  Copy(other);
 }
 
 /*
@@ -136,7 +165,10 @@ PTree::PTree(const PTree& other) {
 */
 PTree& PTree::operator=(const PTree& other) {
   // add your implementation below
-
+  if (this != &other) {
+    this->Clear();
+    Copy(other);
+  }
   return *this;
 }
 
@@ -146,7 +178,7 @@ PTree& PTree::operator=(const PTree& other) {
 */
 PTree::~PTree() {
   // add your implementation below
-  
+  this->Clear();
 }
 
 /*
@@ -161,8 +193,11 @@ PTree::~PTree() {
 *  RETURN: A PNG image of appropriate dimensions and coloured using the tree's leaf node colour data
 */
 PNG PTree::Render() const {
-  // replace the line below with your implementation
-  return PNG();
+  PNG png = PNG(root->width,root->height);
+
+  drawPNG(root, png);
+
+  return png;
 }
 
 /*
@@ -182,8 +217,7 @@ PNG PTree::Render() const {
 *        Each pruned subtree's root becomes a leaf node.
 */
 void PTree::Prune(double tolerance) {
-  // add your implementation below
-  
+  pruner(root, tolerance);
 }
 
 /*
@@ -194,8 +228,15 @@ void PTree::Prune(double tolerance) {
 */
 int PTree::Size() const {
   // replace the line below with your implementation
-  return -1;
+  int size = 0;
+
+  if (root != NULL) {
+    size += subSize(root);
+  }
+
+  return size;
 }
+
 
 /*
 *  Returns the total number of leaf nodes in the tree.
@@ -205,7 +246,13 @@ int PTree::Size() const {
 */
 int PTree::NumLeaves() const {
   // replace the line below with your implementation
-  return -1;
+  int num = 0;
+
+  if (root != NULL) {
+    num += subLeaves(root);
+  }
+
+  return num;
 }
 
 /*
@@ -220,8 +267,7 @@ int PTree::NumLeaves() const {
 *  POST: Tree has been modified so that a rendered PNG will be flipped horizontally.
 */
 void PTree::FlipHorizontal() {
-  // add your implementation below
-  
+  flipHorizontal(root);
 }
 
 /*
@@ -236,8 +282,7 @@ void PTree::FlipHorizontal() {
 *  POST: Tree has been modified so that a rendered PNG will be flipped vertically.
 */
 void PTree::FlipVertical() {
-  // add your implementation below
-  
+  flipVertical(root);
 }
 
 /*
@@ -252,3 +297,172 @@ Node* PTree::GetRoot() {
 // PERSONALLY DEFINED PRIVATE MEMBER FUNCTIONS
 //////////////////////////////////////////////
 
+void PTree::drawPNG(Node* node, PNG& png) const {
+  if (node != nullptr) {
+    if (node->A == nullptr && node->B == nullptr) {
+      pairUI ul = node->upperleft;
+      HSLAPixel nodePixel = node->avg;
+      for (unsigned x = ul.first; x < ul.first + node->width; x++) {
+        for (unsigned y = ul.second; y < ul.second + node->height; y++) {
+          HSLAPixel *pngPixel = png.getPixel(x,y);
+
+          pngPixel->h = nodePixel.h;
+          pngPixel->s = nodePixel.s;
+          pngPixel->l = nodePixel.l;
+          pngPixel->a = nodePixel.a;
+        }
+      }
+    }
+      
+    if (node->A != nullptr) { drawPNG(node->A, png); }
+    if (node->B != nullptr) { drawPNG(node->B, png); }
+  }
+}
+
+HSLAPixel PTree::averageColor(PNG& im, pair<unsigned int, unsigned int> ul, unsigned int w, unsigned int h) {
+  double sumHX = 0;
+  double sumHY = 0;
+  double sumS = 0;
+  double sumL = 0;
+  double sumA = 0;
+  
+  double denominator = 0;
+
+  for (unsigned x = ul.first; x < w + ul.first; x++) {
+    for (unsigned y = ul.second; y < h + ul.second; y++) {
+      HSLAPixel* pixel = im.getPixel(x, y);
+
+      sumHX += Deg2X(pixel->h);
+      sumHY += Deg2Y(pixel->h);
+      sumS += pixel->s;
+      sumL += pixel->l;
+      sumA += pixel->a;
+        
+      denominator++;
+    }
+  }
+
+  double avgHX = sumHX/denominator;
+  double avgHY = sumHY/denominator;
+  double avgH = XY2Deg(avgHX, avgHY);
+
+  double avgS = sumS/denominator;
+  double avgL = sumL/denominator;
+  double avgA = sumA/denominator;
+
+  HSLAPixel avg = HSLAPixel(avgH, avgS, avgL, avgA);
+
+  return avg;
+}
+
+Node* PTree::copyNode(Node* node) {
+  Node *copy = new Node(node->upperleft,node->width,node->height,node->avg,nullptr,nullptr);
+
+  if (node->A == nullptr && node->B == nullptr) { return copy; }
+
+  if (node->A != nullptr) { copy->A = copyNode(node->A); }
+  if (node->B != nullptr) { copy->B = copyNode(node->B); }
+
+  return copy;
+}
+
+void PTree::Clear(Node* subroot) {
+  
+  if (subroot != NULL) {
+    Clear(subroot->A);
+    Clear(subroot->B);
+  }
+
+  delete subroot;
+  subroot = NULL;
+}
+
+int PTree::subSize(Node* subroot) const {
+  int size = 0;
+
+  if (subroot == nullptr) { return size; }
+
+  size++;
+
+  if (subroot->A != nullptr) { size += subSize(subroot->A); }
+  if (subroot->B != nullptr) { size += subSize(subroot->B); }
+
+  return size;
+}
+
+int PTree::subLeaves(Node* subroot) const {
+  int num = 0;
+
+  if (subroot == nullptr) { return num; }
+
+  if (subroot->A == nullptr && subroot->B == nullptr) { num++; }
+
+  if (subroot->A != nullptr) { num += subLeaves(subroot->A); }
+  if (subroot->B != nullptr) { num += subLeaves(subroot->B); }
+
+  return num;
+}
+
+void PTree::pruner(Node* node, double tolerance) {
+  if (node != nullptr) {
+    if (prunable(node, node, tolerance)) {
+      Clear(node->A);
+      Clear(node->B);
+      node->A = nullptr;
+      node->B = nullptr;
+    } else {
+      pruner(node->A, tolerance);
+      pruner(node->B, tolerance);
+    }
+  }
+}
+
+bool PTree::prunable(Node* original, Node* node, double tolerance) {
+  if (node->A == nullptr && node->B == nullptr) {
+    return original->avg.dist(node->avg) <= tolerance;
+  } else {
+    return prunable(original, node->A, tolerance) && prunable(original, node->B, tolerance);
+  }
+}
+
+void PTree::flipHorizontal(Node* node) {
+  PNG png(node->width,node->height);
+  drawPNG(node,png);
+  PNG pngCopy(png);
+
+  for (size_t originalX = 0, mirrorX = node->width - 1; originalX < node->width; originalX++, mirrorX--) {
+    for (size_t y = 0; y < node->height; y++) {
+      HSLAPixel *original = png.getPixel(originalX,y);
+      HSLAPixel *mirror = pngCopy.getPixel(mirrorX,y);
+
+      mirror->h = original->h;
+      mirror->s = original->s;
+      mirror->l = original->l;
+      mirror->a = original->a;
+    }
+  }
+
+  Clear(root);
+  root = BuildNode(pngCopy,make_pair(0,0),pngCopy.width(),pngCopy.height());
+}
+
+void PTree::flipVertical(Node* node) {
+  PNG png(node->width,node->height);
+  drawPNG(node,png);
+  PNG pngCopy(png);
+
+  for (size_t x = 0; x < node->width; x++) {
+    for (size_t originalY = 0, mirrorY = node->height - 1; originalY < node->height; originalY++, mirrorY--) {
+      HSLAPixel *original = png.getPixel(x,originalY);
+      HSLAPixel *mirror = pngCopy.getPixel(x,mirrorY);
+
+      mirror->h = original->h;
+      mirror->s = original->s;
+      mirror->l = original->l;
+      mirror->a = original->a;
+    }
+  }
+
+  Clear(root);
+  root = BuildNode(pngCopy,make_pair(0,0),pngCopy.width(),pngCopy.height());
+}
